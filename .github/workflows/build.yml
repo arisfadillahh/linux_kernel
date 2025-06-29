@@ -4,7 +4,7 @@ on:
   push:
   workflow_dispatch:
   schedule:
-    - cron: '0 0 * * 5'  # Build otomatis setiap Jumat
+    - cron: '0 0 * * 5'
 
 jobs:
   build-kernel:
@@ -24,22 +24,16 @@ jobs:
           ln -s "$PWD/pmbootstrap/pmbootstrap.py" ~/.local/bin/pmbootstrap
           pmbootstrap --version
 
-      - name: Copy config and run init
+      - name: Manually prepare pmaports
+        run: |
+          mkdir -p ~/.local/var/pmbootstrap/cache_git
+          cd ~/.local/var/pmbootstrap/cache_git
+          git clone --depth=1 --branch v25.06 https://github.com/rifux/pipa-pmaports.git pmaports
+
+      - name: Build Kernel without init
         run: |
           mkdir -p ~/.config
           cp xiaomi-pipa.cfg ~/.config/pmbootstrap_v3.cfg
-          pmbootstrap init
-
-      - name: Switch to custom pmaports (rifux/pipa-pmaports.git)
-        run: |
-          cd ~/.local/var/pmbootstrap/cache_git/pmaports
-          git remote remove origin || true
-          git remote add pipa https://github.com/rifux/pipa-pmaports.git || true
-          git fetch pipa v25.06
-          git checkout -B v25.06 pipa/v25.06
-
-      - name: Build Kernel
-        run: |
           pmbootstrap build linux-postmarketos-qcom-sm8250-pipa
 
       - name: Collect Kernel APK
