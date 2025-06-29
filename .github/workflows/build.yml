@@ -1,21 +1,21 @@
 name: Build Xiaomi Pad 6 Kernel
 
 on:
-  workflow_dispatch:  # Memungkinkan trigger manual dari UI GitHub
+  workflow_dispatch:
   push:
-    branches: [ main ]  # Otomatis jalan saat push ke branch main
+    branches: [main]
 
 jobs:
   build-kernel:
     runs-on: ubuntu-latest
-    timeout-minutes: 120  # Build kernel mungkin lama
+    timeout-minutes: 120
 
     steps:
     - name: Checkout Kernel Source
       uses: actions/checkout@v4
       with:
         repository: pipa-mainline/linux
-        ref: vipaoL/dev  # Gunakan branch spesifik
+        ref: vipaoL/dev
         path: kernel-src
 
     - name: Install Dependencies
@@ -26,6 +26,8 @@ jobs:
     - name: Setup Clang Toolchain
       run: |
         git clone --depth=1 https://gitlab.com/AndroidDevil-Toolchains/azure-clang.git clang-llvm
+        # Verifikasi toolchain
+        ls clang-llvm/bin/clang || echo "Clang not found!"
 
     - name: Build Configuration
       run: |
@@ -35,15 +37,20 @@ jobs:
     - name: Build Kernel
       run: |
         cd kernel-src
-        make -j$(nproc) ARCH=arm64 O=out \
-          CC=$GITHUB_WORKSPACE/clang-llvm/bin/clang \
-          LD=$GITHUB_WORKSPACE/clang-llvm/bin/ld.lld \
-          AR=$GITHUB_WORKSPACE/clang-llvm/bin/llvm-ar \
-          CROSS_COMPILE=$GITHUB_WORKSPACE/clang-llvm/bin/aarch64-linux-gnu- \
+        make -j$(($(nproc) - 1)) ARCH=arm64 O=out \
+          CC="$GITHUB_WORKSPACE/clang-llvm/bin/clang" \
+          LD="$GITHUB_WORKSPACE/clang-llvm/bin/ld.lld" \
+          AR="$GITHUB_WORKSPACE/clang-llvm/bin/llvm-ar" \
+          CROSS_COMPILE="$GITHUB_WORKSPACE/clang-llvm/bin/aarch64-linux-gnu-" \
           LLVM=1 LLVM_IAS=1
 
+    - name: List Artifacts
+      run: |
+        ls -la kernel-src/out/arch/arm64/boot/ || true
+        ls -la kernel-src/out/vmlinux || true
+
     - name: Upload Artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: kernel-artifacts
         path: |
