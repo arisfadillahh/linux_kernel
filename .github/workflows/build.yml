@@ -1,35 +1,50 @@
 name: Build Kernel for Xiaomi Pad 6 (pipa)
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # Bisa dijalankan manual dari GitHub UI
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    name: Compile Kernel
 
     steps:
-      - name: Clone kernel source
-        uses: actions/checkout@v3
+      - name: Checkout Source
+        uses: actions/checkout@v4
 
-      - name: Setup build environment
+      - name: Set up environment
         run: |
           sudo apt update
-          sudo apt install -y build-essential libncurses-dev bison flex libssl-dev bc gcc-aarch64-linux-gnu
+          sudo apt install -y build-essential bc bison flex libssl-dev libelf-dev \
+            git gcc-aarch64-linux-gnu make cpio curl python3
 
-      - name: Configure kernel
+      - name: Clone Toolchain
+        run: |
+          git clone https://github.com/arter97/arm64-gcc.git --depth=1 -b master gcc
+          echo "$GITHUB_WORKSPACE/gcc/bin" >> $GITHUB_PATH
+
+      - name: Extract Kernel Source
+        run: |
+          mkdir kernel && tar -xf linux-pipa-initial.tar.gz -C kernel --strip-components=1
+
+      - name: Build Kernel
+        working-directory: ./kernel
         run: |
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
-          make defconfig
-
-      - name: Build kernel
-        run: |
-          export ARCH=arm64
-          export CROSS_COMPILE=aarch64-linux-gnu-
+          make vipaoL_defconfig
           make -j$(nproc)
 
       - name: Upload Image
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: kernel-image
-          path: arch/arm64/boot/Image
+          name: Image
+          path: kernel/arch/arm64/boot/Image
+
+      - name: Upload DTB
+        uses: actions/upload-artifact@v4
+        with:
+          name: DTBs
+          path: |
+            kernel/arch/arm64/boot/dts/qcom/*.dtb
+
