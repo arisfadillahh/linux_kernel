@@ -1,68 +1,103 @@
-name: Build Kernel Xiaomi Pad 6
-
+name: Xiaomi Pad 6 postmarketOS
 on:
+  push: # Build when push
   workflow_dispatch:
-  push:
   schedule:
-    - cron: '0 0 * * 5'  # Setiap Jumat
+    - cron: '0 0 * * 5' # Start build every friday
 
 jobs:
-  build-kernel:
+  build-image:
+    strategy:
+      matrix:
+        version: ["default"]
+
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout this repository
+      - name: Check out build configurations
         uses: actions/checkout@v4
 
       - name: Set current date variable
         run: echo "CURRENT_DATE=$(date +%Y-%m-%d)" >> $GITHUB_ENV
-
-      - name: Install dependencies
+        
+      - name: Create artifact directory
         run: |
-          sudo apt update
-          sudo apt install -y python3-pip git curl tar rsync zip gcc make libssl-dev bc flex bison cpio device-tree-compiler \
-            build-essential libncurses-dev python3-distutils libelf-dev wget unzip fakeroot gnupg zstd
+            mkdir out
+        
+      - name: Substitute placeholders in configs
+        run: |
+           find . -type f -name "*.cfg" -exec sed -i "s|HOME|$(echo $HOME)|;s|NPROC|$(nproc)|" {} +
 
-      - name: Clone pmbootstrap
+      - name: Install pmbootstrap from git
         run: |
           git clone --depth=1 https://gitlab.postmarketos.org/postmarketOS/pmbootstrap.git
           mkdir -p ~/.local/bin
           ln -s "$PWD/pmbootstrap/pmbootstrap.py" ~/.local/bin/pmbootstrap
           pmbootstrap --version
 
-      - name: Clone pmaports custom
+      - name: Set up pmaports
         run: |
-          mkdir -p ~/.local/var/pmbootstrap/cache_git
-          git clone --depth=1 https://github.com/rifux/pipa-pmaports.git ~/.local/var/pmbootstrap/cache_git/pmaports
+          echo -e '\n\n' | pmbootstrap init || true
           cd ~/.local/var/pmbootstrap/cache_git/pmaports
-          git remote add origin https://gitlab.postmarketos.org/postmarketOS/pmaports.git
+          git remote
+          git remote add pipa https://github.com/rifux/pipa-pmaports.git
+          git fetch pipa v25.06
+          git reset --hard pipa/v25.06
 
-      - name: Clone kernel source from GitHub (vipaoL/dev)
+      - name: Build the xiaomi-pipa with KDE Plasma Desktop
         run: |
-          mkdir -p ~/kernel-source
-          git clone --depth=1 --branch vipaoL/dev https://github.com/pipa-mainline/linux.git ~/kernel-source
+           yes | pmbootstrap zap
+           rm -r out/*
+           pmbootstrap install --password 147147 --add postmarketos-ui-plasma-desktop
+           cat /home/runner/.local/var/pmbootstrap/log.txt
+           pmbootstrap export
+           cp /tmp/postmarketOS-export/boot.img out/boot-xiaomi-pipa.img
+           cp /tmp/postmarketOS-export/xiaomi-pipa.img out/rootfs-xiaomi-pipa-plasma.img
 
-      - name: Init pmbootstrap
-        run: |
-          echo -e '\n\n' | pmbootstrap init --no-ccache --device xiaomi-pipa || true
-
-      - name: Copy kernel source into pmbootstrap folder
-        run: |
-          rm -rf ~/.local/var/pmbootstrap/cache_git/pmaports/device/testing/linux-xiaomi-pipa/src
-          mkdir -p ~/.local/var/pmbootstrap/cache_git/pmaports/device/testing/linux-xiaomi-pipa/src
-          cp -r ~/kernel-source/* ~/.local/var/pmbootstrap/cache_git/pmaports/device/testing/linux-xiaomi-pipa/src/
-
-      - name: Build kernel
-        run: |
-          pmbootstrap build linux-xiaomi-pipa
-
-      - name: Prepare output directory
-        run: |
-          mkdir -p out
-          cp ~/.local/var/pmbootstrap/packages/*/aarch64/linux-xiaomi-pipa-*.apk out/
-
-      - name: Upload built kernel
+      - name: Breakpoint if tests failed for xiaomi-pipa with KDE Plasma Desktop
+        if: failure()
+        uses: namespacelabs/breakpoint-action@v0
+        with:
+          duration: 30m
+          authorized-users: rifux
+      
+      - name: Upload artifacts xiaomi-pipa with KDE Plasma Desktop
         uses: actions/upload-artifact@v4
         with:
-          name: xiaomi-pipa-kernel-${{ env.CURRENT_DATE }}
-          path: out/*.apk
-          retention-days: 7
+           name: xiaomi-pipa-plasma_${{ env.CURRENT_DATE }}
+           path: out/*.img*
+           retention-days: 7
+            
+      - name: Build the xiaomi-pipa with GNOME
+        run: |
+           yes | pmbootstrap zap
+           rm -r out/*
+           pmbootstrap install --password 147147 --add postmarketos-ui-gnome
+           pmbootstrap export
+           cp /tmp/postmarketOS-export/boot.img out/boot-xiaomi-pipa.img
+           cp /tmp/postmarketOS-export/xiaomi-pipa.img out/rootfs-xiaomi-pipa-gnome.img
+
+      - name: Breakpoint if tests failed for xiaomi-pipa with GNOME
+        if: failure()
+        uses: namespacelabs/breakpoint-action@v0
+        with:
+          duration: 30m
+          authorized-users: rifux
+            
+      - name: Upload artifacts xiaomi-pipa with GNOME
+        uses: actions/upload-artifact@v4
+        with:
+           name: xiaomi-pipa-gnome_${{ env.CURRENT_DATE }}
+           path: out/*.img*
+           retention-days: 7
+                       
+      - name: Copy xiaomi-pipa kernel
+        run: |
+           rm -r out/*
+           cp ~/.local/var/pmbootstrap/packages/v25.06/aarch64/linux-postmarketos-qcom-sm8250-pipa-*.apk out/
+      
+      - name: Upload artifacts xiaomi-pipa kernel
+        uses: actions/upload-artifact@v4
+        with:
+           name: xiaomi-pipa-kernel_${{ env.CURRENT_DATE }}
+           path: out/*.apk
+           retention-days: 7
