@@ -24,21 +24,15 @@ jobs:
           ln -s "$PWD/pmbootstrap/pmbootstrap.py" ~/.local/bin/pmbootstrap
           pmbootstrap --version
 
-      - name: Copy config and trigger pmbootstrap setup
+      - name: Copy config and run init
         run: |
           mkdir -p ~/.config
           cp xiaomi-pipa.cfg ~/.config/pmbootstrap_v3.cfg
-          echo "Triggering pmbootstrap setup..."
-          pmbootstrap zap || true
+          pmbootstrap init
 
       - name: Switch to custom pmaports (rifux/pipa-pmaports.git)
         run: |
-          export PMAPORTS_DIR="$HOME/.local/var/pmbootstrap/cache_git/pmaports"
-          if [ ! -d "$PMAPORTS_DIR" ]; then
-            echo "ERROR: $PMAPORTS_DIR not found!"
-            exit 1
-          fi
-          cd "$PMAPORTS_DIR"
+          cd ~/.local/var/pmbootstrap/cache_git/pmaports
           git remote remove origin || true
           git remote add pipa https://github.com/rifux/pipa-pmaports.git || true
           git fetch pipa v25.06
