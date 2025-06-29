@@ -1,96 +1,101 @@
-name: Buis
+name: Xiaomi Pad 6 Kernel Build (APK)
 
 on:
+  push:
   workflow_dispatch:
 
 jobs:
-  build-kernel:
+  build-kernel-apk:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout workflow repo
+      - name: Checkout this repo
         uses: actions/checkout@v4
 
-      - name: Set environment
+      - name: Set up date for artifacts
         run: echo "CURRENT_DATE=$(date +%Y-%m-%d)" >> $GITHUB_ENV
 
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y python3 python3-pip git curl gcc
+          sudo apt install -y git tar curl python3
+
+      - name: Clone kernel source from GitHub
+        run: |
+          git clone --depth=1 -b vipaoL/dev https://github.com/pipa-mainline/linux.git kernel-source
 
       - name: Install pmbootstrap
         run: |
-          git clone --depth=1 https://gitlab.postmarketos.org/postmarketOS/pmbootstrap.git
+          git clone --depth=1 https://gitlab.com/postmarketOS/pmbootstrap.git
           mkdir -p ~/.local/bin
           ln -s "$PWD/pmbootstrap/pmbootstrap.py" ~/.local/bin/pmbootstrap
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
           pmbootstrap --version
 
-      - name: Init pmbootstrap config
-        run: echo -e '\n\n' | pmbootstrap init || true
-
-      - name: Set up custom pmaports
+      - name: Init pmbootstrap and prepare pmaports
         run: |
+          echo -e '\n\n' | pmbootstrap init || true
           cd ~/.local/var/pmbootstrap/cache_git/pmaports
-          git remote add pipa https://github.com/rifux/pipa-pmaports.git
+          git remote add pipa https://github.com/rifux/pipa-pmaports.git || true
           git fetch pipa v25.06
-          git reset --hard pipa/v25.06
+          git checkout -B v25.06 pipa/v25.06
 
-      - name: Clone kernel source
+      - name: Prepare kernel source archive
         run: |
-          git clone --depth=1 -b vipaoL/dev https://github.com/pipa-mainline/linux.git kernel-source
-          tar czf linux-pipa.tar.gz -C kernel-source .
+          tar -czf linux-pipa.tar.gz -C kernel-source .
 
       - name: Create APKBUILD for linux-xiaomi-pipa
         run: |
           mkdir -p ~/.local/var/pmbootstrap/cache_git/pmaports/device/testing/linux-xiaomi-pipa
-          cat <<EOF > ~/.local/var/pmbootstrap/cache_git/pmaports/device/testing/linux-xiaomi-pipa/APKBUILD
-# Maintainer: Aris Fadillah <your@email.com>
-pkgname=linux-xiaomi-pipa
-pkgver=6.8.0_git20240627
-pkgrel=0
-pkgdesc="Mainline kernel for Xiaomi Pad 6 (pipa)"
-url="https://github.com/pipa-mainline/linux"
-arch="aarch64"
-license="GPL-2.0-only"
-options="!strip !check"
-makedepends="perl bc openssl-dev dtc gmp-dev mpfr-dev mpc1-dev elfutils-dev flex bison"
-source="linux-pipa.tar.gz"
-builddir="\$srcdir/linux"
-
-prepare() {
-  mkdir -p "\$builddir"
-  tar -xf "\$srcdir/linux-pipa.tar.gz" -C "\$builddir" --strip-components=1
-}
-
-build() {
-  cd "\$builddir"
-  make ARCH=arm64 defconfig
-  make ARCH=arm64 CROSS_COMPILE=aarch64-alpine-linux-musl- -j\$(nproc)
-}
-
-package() {
-  mkdir -p "\$pkgdir"/boot
-  cp "\$builddir"/arch/arm64/boot/Image "\$pkgdir"/boot/
-  cp "\$builddir"/arch/arm64/boot/dts/qcom/*.dtb* "\$pkgdir"/boot/
-}
-
-sha512sums="SKIP"
-EOF
+          APK=~/.local/var/pmbootstrap/cache_git/pmaports/device/testing/linux-xiaomi-pipa/APKBUILD
+          echo "# Maintainer: Aris Fadillah <email@example.com>" > $APK
+          echo "pkgname=linux-xiaomi-pipa" >> $APK
+          echo "pkgver=6.8.0_git20240627" >> $APK
+          echo "pkgrel=0" >> $APK
+          echo "pkgdesc=\"Mainline kernel for Xiaomi Pad 6 (pipa)\"" >> $APK
+          echo "url=\"https://github.com/pipa-mainline/linux\"" >> $APK
+          echo "arch=\"aarch64\"" >> $APK
+          echo "license=\"GPL-2.0-only\"" >> $APK
+          echo "options=\"!strip !check\"" >> $APK
+          echo "makedepends=\"perl bc openssl-dev dtc gmp-dev mpfr-dev mpc1-dev elfutils-dev flex bison\"" >> $APK
+          echo "source=\"linux-pipa.tar.gz\"" >> $APK
+          echo "builddir=\"\$srcdir/linux\"" >> $APK
+          echo "" >> $APK
+          echo "prepare() {" >> $APK
+          echo "  mkdir -p \"\$builddir\"" >> $APK
+          echo "  tar -xf \"\$srcdir/linux-pipa.tar.gz\" -C \"\$builddir\" --strip-components=1" >> $APK
+          echo "}" >> $APK
+          echo "" >> $APK
+          echo "build() {" >> $APK
+          echo "  cd \"\$builddir\"" >> $APK
+          echo "  make ARCH=arm64 defconfig" >> $APK
+          echo "  make ARCH=arm64 CROSS_COMPILE=aarch64-alpine-linux-musl- -j\$(nproc)" >> $APK
+          echo "}" >> $APK
+          echo "" >> $APK
+          echo "package() {" >> $APK
+          echo "  mkdir -p \"\$pkgdir\"/boot" >> $APK
+          echo "  cp \"\$builddir\"/arch/arm64/boot/Image \"\$pkgdir\"/boot/" >> $APK
+          echo "  cp \"\$builddir\"/arch/arm64/boot/dts/qcom/*.dtb* \"\$pkgdir\"/boot/" >> $APK
+          echo "}" >> $APK
+          echo "" >> $APK
+          echo "sha512sums=\"SKIP\"" >> $APK
 
       - name: Copy kernel tarball to pmaports
-        run: cp linux-pipa.tar.gz ~/.local/var/pmbootstrap/cache_git/pmaports/device/testing/linux-xiaomi-pipa/
+        run: |
+          cp linux-pipa.tar.gz ~/.local/var/pmbootstrap/cache_git/pmaports/device/testing/linux-xiaomi-pipa/
 
       - name: Build kernel APK
         run: |
           pmbootstrap build linux-xiaomi-pipa
-          mkdir -p out
-          cp ~/.local/var/pmbootstrap/packages/*/aarch64/linux-xiaomi-pipa-*.apk out/
 
-      - name: Upload kernel .apk
+      - name: Find built APK
+        run: |
+          find ~/.local/var/pmbootstrap/packages -name "linux-xiaomi-pipa*.apk"
+          mkdir -p out
+          cp ~/.local/var/pmbootstrap/packages/*/linux-xiaomi-pipa*.apk out/
+
+      - name: Upload .apk artifact
         uses: actions/upload-artifact@v4
         with:
-          name: xiaomi-pipa-kernel_${{ env.CURRENT_DATE }}
-          path: out/*.apk
+          name: xiaomi-pipa-kernel-${{ env.CURRENT_DATE }}
+          path: out/
           retention-days: 7
