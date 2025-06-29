@@ -37,12 +37,14 @@ jobs:
 
       - name: Set up pmaports
         run: |
-          echo -e '\n\n' | pmbootstrap init || true
-          cd ~/.local/var/pmbootstrap/cache_git/pmaports
-          git remote
-          git remote add pipa https://github.com/rifux/pipa-pmaports.git
-          git fetch pipa v25.06
-          git reset --hard pipa/v25.06
+          cd ~/.local/var/pmbootstrap/cache_git
+          git clone https://github.com/rifux/pipa-pmaports.git pmaports
+          cd pmaports
+          git checkout v25.06
+
+      - name: Init pmbootstrap for Xiaomi Pad 6
+        run: |
+          pmbootstrap init --device xiaomi-pipa --ui none --aports ~/.local/var/pmbootstrap/cache_git/pmaports
 
       - name: Build the xiaomi-pipa with KDE Plasma Desktop
         run: |
