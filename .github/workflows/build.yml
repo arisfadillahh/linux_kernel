@@ -21,20 +21,17 @@ jobs:
     - name: Install Dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y build-essential libncurses-dev bison flex libssl-dev libelf-dev bc ccache python3 python3-pip wget
+        sudo apt-get install -y build-essential libncurses-dev bison flex libssl-dev libelf-dev bc ccache python3 python3-pip wget git
 
-    - name: Download AOSP Clang Toolchain
+    - name: Download Proton Clang Toolchain
       run: |
-        # Menggunakan toolchain resmi dari Android Open Source Project
-        wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/master/clang-r498229.tar.gz
-        mkdir -p aosp-clang
-        tar -xzvf clang-r498229.tar.gz -C aosp-clang
-        rm clang-r498229.tar.gz
+        # Menggunakan Proton Clang yang lebih stabil
+        git clone --depth=1 https://github.com/kdrag0n/proton-clang.git proton-clang
 
     - name: Verify Toolchain
       run: |
-        ls -la aosp-clang/bin/clang
-        aosp-clang/bin/clang --version || true
+        ls -la proton-clang/bin/clang
+        proton-clang/bin/clang --version || true
 
     - name: Build Configuration
       run: |
@@ -45,20 +42,21 @@ jobs:
       run: |
         cd kernel-src
         make -j$(($(nproc) - 1)) ARCH=arm64 O=out \
-          CC="$GITHUB_WORKSPACE/aosp-clang/bin/clang" \
-          LD="$GITHUB_WORKSPACE/aosp-clang/bin/ld.lld" \
-          AR="$GITHUB_WORKSPACE/aosp-clang/bin/llvm-ar" \
-          NM="$GITHUB_WORKSPACE/aosp-clang/bin/llvm-nm" \
-          OBJCOPY="$GITHUB_WORKSPACE/aosp-clang/bin/llvm-objcopy" \
-          OBJDUMP="$GITHUB_WORKSPACE/aosp-clang/bin/llvm-objdump" \
-          STRIP="$GITHUB_WORKSPACE/aosp-clang/bin/llvm-strip" \
-          CROSS_COMPILE=aarch64-linux-gnu- \
+          CC="$GITHUB_WORKSPACE/proton-clang/bin/clang" \
+          LD="$GITHUB_WORKSPACE/proton-clang/bin/ld.lld" \
+          AR="$GITHUB_WORKSPACE/proton-clang/bin/llvm-ar" \
+          NM="$GITHUB_WORKSPACE/proton-clang/bin/llvm-nm" \
+          OBJCOPY="$GITHUB_WORKSPACE/proton-clang/bin/llvm-objcopy" \
+          OBJDUMP="$GITHUB_WORKSPACE/proton-clang/bin/llvm-objdump" \
+          STRIP="$GITHUB_WORKSPACE/proton-clang/bin/llvm-strip" \
+          CROSS_COMPILE="$GITHUB_WORKSPACE/proton-clang/bin/aarch64-linux-gnu-" \
+          CROSS_COMPILE_ARM32="$GITHUB_WORKSPACE/proton-clang/bin/arm-linux-gnueabi-" \
           LLVM=1 LLVM_IAS=1
 
     - name: Verify Build Output
       run: |
         ls -la kernel-src/out/arch/arm64/boot/ || true
-        [ -f kernel-src/out/arch/arm64/boot/Image ] && echo "Kernel build successful!" || echo "Kernel file not found!"
+        [ -f kernel-src/out/arch/arm64/boot/Image ] && echo "✅ Kernel build successful!" || echo "❌ Kernel file not found!"
 
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
