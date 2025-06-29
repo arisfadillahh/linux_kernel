@@ -1,41 +1,55 @@
-name: Build Kernel APK for postmarketOS (Xiaomi Pad 6 - pipa)
+name: Build Kernel for Xiaomi Pad 6 (pipa)
 
 on:
   workflow_dispatch:
+  push:
+  schedule:
+    - cron: '0 0 * * 5'
 
 jobs:
-  build:
+  build-kernel:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout this repo
+      - name: Checkout dummy workspace
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Clone pmbootstrap
         run: |
-          sudo apt update
-          sudo apt install -y git python3 py3-pip bash sudo
-          pip3 install --upgrade pip
-          pip3 install pmbootstrap
+          git clone --depth=1 https://gitlab.postmarketos.org/postmarketOS/pmbootstrap.git
+          mkdir -p ~/.local/bin
+          ln -s "$PWD/pmbootstrap/pmbootstrap.py" ~/.local/bin/pmbootstrap
+          pmbootstrap --version
 
-      - name: Clone pmaports
-        run: |
-          git clone https://github.com/pipa-mainline/pmaports.git
-          cd pmaports
-          git checkout vipaoL/dev
+      - name: Init pmbootstrap
+        run: echo -e '\n\n' | pmbootstrap init || true
 
-      - name: Init pmbootstrap config
+      - name: Use default pmaports and clone kernel repo
         run: |
-          mkdir -p ~/.config
-          echo -e "architecture: aarch64\ndistribution: edge\ndevice: xiaomi-pipa\n" > ~/.config/pmbootstrap.yaml
+          # Clone kernel dari GitHub branch vipaoL/dev
+          git clone --depth=1 --branch vipaoL/dev https://github.com/pipa-mainline/linux.git ~/kernel-source
 
-      - name: Build kernel package
+          # Buat tarball
+          cd ~/kernel-source
+          cd ..
+          tar -czf linux-pipa.tar.gz kernel-source
+
+          # Taruh tarball ke tempat pmaports nyari
+          mkdir -p ~/.local/var/pmbootstrap/cache_git/pmaports/device/testing/linux-xiaomi-pipa
+          cp linux-pipa.tar.gz ~/.local/var/pmbootstrap/cache_git/pmaports/device/testing/linux-xiaomi-pipa/linux-pipa.tar.gz
+
+          # Update APKBUILD biar cocok
+          APKBUILD=~/.local/var/pmbootstrap/cache_git/pmaports/device/testing/linux-xiaomi-pipa/APKBUILD
+          sed -i 's|source=.*|source="linux-pipa.tar.gz"|' "$APKBUILD"
+          sed -i 's|sha512sums=.*|sha512sums="SKIP"|' "$APKBUILD"
+
+      - name: Build kernel
         run: |
-          pmbootstrap zap --force
-          pmbootstrap init --workdir "$(pwd)/pmaports" --no-keygen --device xiaomi-pipa --mirror-edge
           pmbootstrap build linux-xiaomi-pipa
 
-      - name: Upload built .apk
+      - name: Upload kernel .apk
         uses: actions/upload-artifact@v4
         with:
-          name: kernel-apk
-          path: ~/.local/var/pmbootstrap/packages/aarch64/linux-xiaomi-pipa*.apk
+          name: xiaomi-pipa-kernel
+          path: ~/.local/var/pmbootstrap/packages/*/aarch64/linux-xiaomi-pipa-*.apk
+          retention-days: 7
