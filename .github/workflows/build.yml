@@ -1,59 +1,51 @@
-name: Build Kernel Xiaomi Pad 6
+name: Build Xiaomi Pad 6 Kernel
 
 on:
+  workflow_dispatch:  # Memungkinkan trigger manual dari UI GitHub
   push:
-  workflow_dispatch:
-  schedule:
-    - cron: '0 0 * * 5'
+    branches: [ main ]  # Otomatis jalan saat push ke branch main
 
 jobs:
   build-kernel:
     runs-on: ubuntu-latest
+    timeout-minutes: 120  # Build kernel mungkin lama
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    - name: Checkout Kernel Source
+      uses: actions/checkout@v4
+      with:
+        repository: pipa-mainline/linux
+        ref: vipaoL/dev  # Gunakan branch spesifik
+        path: kernel-src
 
-      - name: Set current date variable
-        run: echo "CURRENT_DATE=$(date +%Y-%m-%d)" >> $GITHUB_ENV
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential libncurses-dev bison flex libssl-dev libelf-dev bc ccache python3 python3-pip
 
-      - name: Install pmbootstrap
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y git
-          git clone --depth=1 https://gitlab.postmarketos.org/postmarketOS/pmbootstrap.git
-          mkdir -p ~/.local/bin
-          ln -s "$PWD/pmbootstrap/pmbootstrap.py" ~/.local/bin/pmbootstrap
-          pmbootstrap --version
+    - name: Setup Clang Toolchain
+      run: |
+        git clone --depth=1 https://gitlab.com/AndroidDevil-Toolchains/azure-clang.git clang-llvm
 
-      - name: Setup custom pmaports manually
-        run: |
-          mkdir -p ~/.local/var/pmbootstrap/cache_git
-          git clone --depth=1 --branch v25.06 https://github.com/rifux/pipa-pmaports.git ~/.local/var/pmbootstrap/cache_git/pmaports
-          git -C ~/.local/var/pmbootstrap/cache_git/pmaports remote add fake https://gitlab.postmarketos.org/postmarketOS/pmaports.git
+    - name: Build Configuration
+      run: |
+        cd kernel-src
+        make ARCH=arm64 O=out vendor/pipa_defconfig
 
-      - name: Provide pmbootstrap config
-        run: |
-          mkdir -p ~/.config
-          cat > ~/.config/pmbootstrap_v3.cfg <<EOF
-[general]
-device = xiaomi-pipa
-aports = ~/.local/var/pmbootstrap/cache_git/pmaports
-ui = none
-EOF
+    - name: Build Kernel
+      run: |
+        cd kernel-src
+        make -j$(nproc) ARCH=arm64 O=out \
+          CC=$GITHUB_WORKSPACE/clang-llvm/bin/clang \
+          LD=$GITHUB_WORKSPACE/clang-llvm/bin/ld.lld \
+          AR=$GITHUB_WORKSPACE/clang-llvm/bin/llvm-ar \
+          CROSS_COMPILE=$GITHUB_WORKSPACE/clang-llvm/bin/aarch64-linux-gnu- \
+          LLVM=1 LLVM_IAS=1
 
-      - name: Build Kernel
-        run: |
-          pmbootstrap build linux-postmarketos-qcom-sm8250-pipa
-
-      - name: Collect Kernel APK
-        run: |
-          mkdir -p out
-          cp ~/.local/var/pmbootstrap/packages/v25.06/aarch64/linux-postmarketos-qcom-sm8250-pipa-*.apk out/
-
-      - name: Upload Kernel APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: xiaomi-pipa-kernel_${{ env.CURRENT_DATE }}
-          path: out/*.apk
-          retention-days: 14
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: kernel-artifacts
+        path: |
+          kernel-src/out/arch/arm64/boot/Image
+          kernel-src/out/vmlinux
