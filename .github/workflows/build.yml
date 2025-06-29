@@ -1,6 +1,68 @@
+name: Build Kernel Xiaomi Pad 6
+
+on:
+  workflow_dispatch:
+  push:
+  schedule:
+    - cron: '0 0 * * 5'  # Setiap Jumat
+
+jobs:
+  build-kernel:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout this repository
+        uses: actions/checkout@v4
+
+      - name: Set current date variable
+        run: echo "CURRENT_DATE=$(date +%Y-%m-%d)" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y python3-pip git curl tar rsync zip gcc make libssl-dev bc flex bison cpio device-tree-compiler \
+            build-essential libncurses-dev python3-distutils libelf-dev wget unzip fakeroot gnupg zstd
+
+      - name: Clone pmbootstrap
+        run: |
+          git clone --depth=1 https://gitlab.postmarketos.org/postmarketOS/pmbootstrap.git
+          mkdir -p ~/.local/bin
+          ln -s "$PWD/pmbootstrap/pmbootstrap.py" ~/.local/bin/pmbootstrap
+          pmbootstrap --version
+
       - name: Clone pmaports custom
         run: |
           mkdir -p ~/.local/var/pmbootstrap/cache_git
           git clone --depth=1 https://github.com/rifux/pipa-pmaports.git ~/.local/var/pmbootstrap/cache_git/pmaports
           cd ~/.local/var/pmbootstrap/cache_git/pmaports
           git remote add origin https://gitlab.postmarketos.org/postmarketOS/pmaports.git
+
+      - name: Clone kernel source from GitHub (vipaoL/dev)
+        run: |
+          mkdir -p ~/kernel-source
+          git clone --depth=1 --branch vipaoL/dev https://github.com/pipa-mainline/linux.git ~/kernel-source
+
+      - name: Init pmbootstrap
+        run: |
+          echo -e '\n\n' | pmbootstrap init --no-ccache --device xiaomi-pipa || true
+
+      - name: Copy kernel source into pmbootstrap folder
+        run: |
+          rm -rf ~/.local/var/pmbootstrap/cache_git/pmaports/device/testing/linux-xiaomi-pipa/src
+          mkdir -p ~/.local/var/pmbootstrap/cache_git/pmaports/device/testing/linux-xiaomi-pipa/src
+          cp -r ~/kernel-source/* ~/.local/var/pmbootstrap/cache_git/pmaports/device/testing/linux-xiaomi-pipa/src/
+
+      - name: Build kernel
+        run: |
+          pmbootstrap build linux-xiaomi-pipa
+
+      - name: Prepare output directory
+        run: |
+          mkdir -p out
+          cp ~/.local/var/pmbootstrap/packages/*/aarch64/linux-xiaomi-pipa-*.apk out/
+
+      - name: Upload built kernel
+        uses: actions/upload-artifact@v4
+        with:
+          name: xiaomi-pipa-kernel-${{ env.CURRENT_DATE }}
+          path: out/*.apk
+          retention-days: 7
