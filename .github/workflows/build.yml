@@ -1,55 +1,96 @@
-name: Build Kernel for Xiaomi Pad 6 (pipa)
+name: Build Xiaomi Pad 6 Kernel
 
 on:
   workflow_dispatch:
-  push:
-  schedule:
-    - cron: '0 0 * * 5'
 
 jobs:
   build-kernel:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout dummy workspace
+      - name: Checkout workflow repo
         uses: actions/checkout@v4
 
-      - name: Clone pmbootstrap
+      - name: Set environment
+        run: echo "CURRENT_DATE=$(date +%Y-%m-%d)" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y python3 python3-pip git curl gcc
+
+      - name: Install pmbootstrap
         run: |
           git clone --depth=1 https://gitlab.postmarketos.org/postmarketOS/pmbootstrap.git
           mkdir -p ~/.local/bin
           ln -s "$PWD/pmbootstrap/pmbootstrap.py" ~/.local/bin/pmbootstrap
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
           pmbootstrap --version
 
-      - name: Init pmbootstrap
+      - name: Init pmbootstrap config
         run: echo -e '\n\n' | pmbootstrap init || true
 
-      - name: Use default pmaports and clone kernel repo
+      - name: Set up custom pmaports
         run: |
-          # Clone kernel dari GitHub branch vipaoL/dev
-          git clone --depth=1 --branch vipaoL/dev https://github.com/pipa-mainline/linux.git ~/kernel-source
+          cd ~/.local/var/pmbootstrap/cache_git/pmaports
+          git remote add pipa https://github.com/rifux/pipa-pmaports.git
+          git fetch pipa v25.06
+          git reset --hard pipa/v25.06
 
-          # Buat tarball
-          cd ~/kernel-source
-          cd ..
-          tar -czf linux-pipa.tar.gz kernel-source
+      - name: Clone kernel source
+        run: |
+          git clone --depth=1 -b vipaoL/dev https://github.com/pipa-mainline/linux.git kernel-source
+          tar czf linux-pipa.tar.gz -C kernel-source .
 
-          # Taruh tarball ke tempat pmaports nyari
+      - name: Create APKBUILD for linux-xiaomi-pipa
+        run: |
           mkdir -p ~/.local/var/pmbootstrap/cache_git/pmaports/device/testing/linux-xiaomi-pipa
-          cp linux-pipa.tar.gz ~/.local/var/pmbootstrap/cache_git/pmaports/device/testing/linux-xiaomi-pipa/linux-pipa.tar.gz
+          cat <<EOF > ~/.local/var/pmbootstrap/cache_git/pmaports/device/testing/linux-xiaomi-pipa/APKBUILD
+# Maintainer: Aris Fadillah <your@email.com>
+pkgname=linux-xiaomi-pipa
+pkgver=6.8.0_git20240627
+pkgrel=0
+pkgdesc="Mainline kernel for Xiaomi Pad 6 (pipa)"
+url="https://github.com/pipa-mainline/linux"
+arch="aarch64"
+license="GPL-2.0-only"
+options="!strip !check"
+makedepends="perl bc openssl-dev dtc gmp-dev mpfr-dev mpc1-dev elfutils-dev flex bison"
+source="linux-pipa.tar.gz"
+builddir="\$srcdir/linux"
 
-          # Update APKBUILD biar cocok
-          APKBUILD=~/.local/var/pmbootstrap/cache_git/pmaports/device/testing/linux-xiaomi-pipa/APKBUILD
-          sed -i 's|source=.*|source="linux-pipa.tar.gz"|' "$APKBUILD"
-          sed -i 's|sha512sums=.*|sha512sums="SKIP"|' "$APKBUILD"
+prepare() {
+  mkdir -p "\$builddir"
+  tar -xf "\$srcdir/linux-pipa.tar.gz" -C "\$builddir" --strip-components=1
+}
 
-      - name: Build kernel
+build() {
+  cd "\$builddir"
+  make ARCH=arm64 defconfig
+  make ARCH=arm64 CROSS_COMPILE=aarch64-alpine-linux-musl- -j\$(nproc)
+}
+
+package() {
+  mkdir -p "\$pkgdir"/boot
+  cp "\$builddir"/arch/arm64/boot/Image "\$pkgdir"/boot/
+  cp "\$builddir"/arch/arm64/boot/dts/qcom/*.dtb* "\$pkgdir"/boot/
+}
+
+sha512sums="SKIP"
+EOF
+
+      - name: Copy kernel tarball to pmaports
+        run: cp linux-pipa.tar.gz ~/.local/var/pmbootstrap/cache_git/pmaports/device/testing/linux-xiaomi-pipa/
+
+      - name: Build kernel APK
         run: |
           pmbootstrap build linux-xiaomi-pipa
+          mkdir -p out
+          cp ~/.local/var/pmbootstrap/packages/*/aarch64/linux-xiaomi-pipa-*.apk out/
 
       - name: Upload kernel .apk
         uses: actions/upload-artifact@v4
         with:
-          name: xiaomi-pipa-kernel
-          path: ~/.local/var/pmbootstrap/packages/*/aarch64/linux-xiaomi-pipa-*.apk
+          name: xiaomi-pipa-kernel_${{ env.CURRENT_DATE }}
+          path: out/*.apk
           retention-days: 7
