@@ -1,41 +1,41 @@
-name: Build Xiaomi Pad 6 Kernel
+name: Build Kernel APK for postmarketOS (Xiaomi Pad 6 - pipa)
 
 on:
-  push:
-    branches:
-      - vipaoL/dev
   workflow_dispatch:
 
 jobs:
-  build-kernel:
+  build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Repository
+      - name: Checkout this repo
         uses: actions/checkout@v4
 
-      - name: Set up environment
-        run: sudo apt update && sudo apt install -y bc bison flex libssl-dev make gcc clang libc6-dev libncurses-dev ccache
-
-      - name: Extract Kernel Source
+      - name: Install dependencies
         run: |
-          mkdir -p kernel
-          tar -xf linux-pipa-initial.tar.gz -C kernel --strip-components=1
+          sudo apt update
+          sudo apt install -y git python3 py3-pip bash sudo
+          pip3 install --upgrade pip
+          pip3 install pmbootstrap
 
-      - name: Build Kernel
+      - name: Clone pmaports
         run: |
-          cd kernel
-          make ARCH=arm64 defconfig
-          make -j$(nproc) ARCH=arm64
+          git clone https://github.com/pipa-mainline/pmaports.git
+          cd pmaports
+          git checkout vipaoL/dev
 
-      - name: Upload zImage
+      - name: Init pmbootstrap config
+        run: |
+          mkdir -p ~/.config
+          echo -e "architecture: aarch64\ndistribution: edge\ndevice: xiaomi-pipa\n" > ~/.config/pmbootstrap.yaml
+
+      - name: Build kernel package
+        run: |
+          pmbootstrap zap --force
+          pmbootstrap init --workdir "$(pwd)/pmaports" --no-keygen --device xiaomi-pipa --mirror-edge
+          pmbootstrap build linux-xiaomi-pipa
+
+      - name: Upload built .apk
         uses: actions/upload-artifact@v4
         with:
-          name: zImage
-          path: kernel/arch/arm64/boot/Image
-
-      - name: Upload dtb
-        uses: actions/upload-artifact@v4
-        with:
-          name: dtb
-          path: kernel/arch/arm64/boot/dts/qcom/*.dtb
+          name: kernel-apk
+          path: ~/.local/var/pmbootstrap/packages/aarch64/linux-xiaomi-pipa*.apk
