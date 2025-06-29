@@ -1,4 +1,4 @@
-name: Build Xiaomi Pad 6 Kernel
+name: Buis
 
 on:
   workflow_dispatch:
