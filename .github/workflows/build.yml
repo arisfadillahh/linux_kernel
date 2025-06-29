@@ -1,55 +1,6 @@
-name: Build Kernel for Xiaomi Pad 6
-
-on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
-
-jobs:
-  build-kernel:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout this repo
-        uses: actions/checkout@v4
-
-      - name: Install required packages
-        run: |
-          sudo apt update
-          sudo apt install -y git python3-pip
-
-      - name: Clone pmbootstrap
-        run: |
-          git clone --depth=1 https://gitlab.postmarketos.org/postmarketOS/pmbootstrap.git
-          mkdir -p ~/.local/bin
-          ln -s "$PWD/pmbootstrap/pmbootstrap.py" ~/.local/bin/pmbootstrap
-
       - name: Clone pmaports custom
         run: |
           mkdir -p ~/.local/var/pmbootstrap/cache_git
           git clone --depth=1 https://github.com/rifux/pipa-pmaports.git ~/.local/var/pmbootstrap/cache_git/pmaports
-
-      - name: Init pmbootstrap
-        run: |
-          echo -e '\n\n' | pmbootstrap init --device xiaomi-pipa || true
-
-      - name: Replace kernel source with GitHub version
-        run: |
-          cd ~/.local/var/pmbootstrap/cache_git
-          rm -rf linux
-          git clone --depth=1 --branch vipaoL/dev https://github.com/pipa-mainline/linux.git linux
-
-      - name: Build Kernel APK
-        run: |
-          pmbootstrap build linux-xiaomi-pipa
-
-      - name: Copy kernel .apk to output
-        run: |
-          mkdir -p out
-          cp ~/.local/var/pmbootstrap/packages/*/aarch64/linux-xiaomi-pipa-*.apk out/
-
-      - name: Upload Kernel Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: xiaomi-pipa-kernel
-          path: out/*.apk
+          cd ~/.local/var/pmbootstrap/cache_git/pmaports
+          git remote add origin https://gitlab.postmarketos.org/postmarketOS/pmaports.git
