@@ -1,0 +1,35 @@
+name: Build Kernel for Xiaomi Pad 6 (pipa)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clone kernel source
+        uses: actions/checkout@v3
+
+      - name: Setup build environment
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential libncurses-dev bison flex libssl-dev bc gcc-aarch64-linux-gnu
+
+      - name: Configure kernel
+        run: |
+          export ARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          make defconfig
+
+      - name: Build kernel
+        run: |
+          export ARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          make -j$(nproc)
+
+      - name: Upload Image
+        uses: actions/upload-artifact@v3
+        with:
+          name: kernel-image
+          path: arch/arm64/boot/Image
