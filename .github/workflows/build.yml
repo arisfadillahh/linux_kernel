@@ -4,7 +4,7 @@ on:
   push:
   workflow_dispatch:
   schedule:
-    - cron: '0 0 * * 5' # Every Friday
+    - cron: '0 0 * * 5' # Setiap Jumat
 
 jobs:
   build-image:
@@ -56,7 +56,14 @@ jobs:
 
       - name: Print log on Plasma build failure
         if: failure()
-        run: cat ~/.local/var/pmbootstrap/log.txt
+        run: |
+          LOGFILE="$HOME/.local/var/pmbootstrap/log.txt"
+          if [ -f "$LOGFILE" ]; then
+            cat "$LOGFILE"
+          else
+            echo "Log file not found at $LOGFILE"
+            find $HOME/.local/var/pmbootstrap -name "*.log"
+          fi
 
       - name: Breakpoint if tests failed for xiaomi-pipa with KDE Plasma Desktop
         if: failure()
@@ -84,7 +91,14 @@ jobs:
 
       - name: Print log on GNOME build failure
         if: failure()
-        run: cat ~/.local/var/pmbootstrap/log.txt
+        run: |
+          LOGFILE="$HOME/.local/var/pmbootstrap/log.txt"
+          if [ -f "$LOGFILE" ]; then
+            cat "$LOGFILE"
+          else
+            echo "Log file not found at $LOGFILE"
+            find $HOME/.local/var/pmbootstrap -name "*.log"
+          fi
 
       - name: Breakpoint if tests failed for xiaomi-pipa with GNOME
         if: failure()
