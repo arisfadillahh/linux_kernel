@@ -4,7 +4,7 @@ on:
   push:
   workflow_dispatch:
   schedule:
-    - cron: '0 0 * * 5'  # Build tiap Jumat otomatis
+    - cron: '0 0 * * 5'
 
 jobs:
   build-kernel:
@@ -17,38 +17,30 @@ jobs:
       - name: Set current date variable
         run: echo "CURRENT_DATE=$(date +%Y-%m-%d)" >> $GITHUB_ENV
 
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y expect git
-
       - name: Install pmbootstrap
         run: |
+          sudo apt-get update
+          sudo apt-get install -y git
           git clone --depth=1 https://gitlab.postmarketos.org/postmarketOS/pmbootstrap.git
           mkdir -p ~/.local/bin
           ln -s "$PWD/pmbootstrap/pmbootstrap.py" ~/.local/bin/pmbootstrap
           pmbootstrap --version
 
-      - name: Copy config and run pmbootstrap init via expect
+      - name: Setup custom pmaports manually
+        run: |
+          mkdir -p ~/.local/var/pmbootstrap/cache_git
+          git clone --depth=1 --branch v25.06 https://github.com/rifux/pipa-pmaports.git ~/.local/var/pmbootstrap/cache_git/pmaports
+          git -C ~/.local/var/pmbootstrap/cache_git/pmaports remote add fake https://gitlab.postmarketos.org/postmarketOS/pmaports.git
+
+      - name: Provide pmbootstrap config
         run: |
           mkdir -p ~/.config
-          cp xiaomi-pipa.cfg ~/.config/pmbootstrap_v3.cfg
-
-          expect <<EOF
-          spawn pmbootstrap init
-          expect "Vendor*" { send "xiaomi\r" }
-          expect "Device*" { send "pipa\r" }
-          expect "UI*"     { send "none\r" }
-          expect eof
-          EOF
-
-      - name: Switch to custom pmaports (rifux/pipa-pmaports.git)
-        run: |
-          cd ~/.local/var/pmbootstrap/cache_git/pmaports
-          git remote remove origin || true
-          git remote add pipa https://github.com/rifux/pipa-pmaports.git || true
-          git fetch pipa v25.06
-          git checkout -B v25.06 pipa/v25.06
+          cat > ~/.config/pmbootstrap_v3.cfg <<EOF
+[general]
+device = xiaomi-pipa
+aports = ~/.local/var/pmbootstrap/cache_git/pmaports
+ui = none
+EOF
 
       - name: Build Kernel
         run: |
@@ -59,7 +51,7 @@ jobs:
           mkdir -p out
           cp ~/.local/var/pmbootstrap/packages/v25.06/aarch64/linux-postmarketos-qcom-sm8250-pipa-*.apk out/
 
-      - name: Upload Kernel APK as Artifact
+      - name: Upload Kernel APK
         uses: actions/upload-artifact@v4
         with:
           name: xiaomi-pipa-kernel_${{ env.CURRENT_DATE }}
