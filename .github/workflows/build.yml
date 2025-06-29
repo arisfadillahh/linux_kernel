@@ -1,10 +1,10 @@
-name: Build Xiaomi Pad 6 Kernel
+name: Build Kernel Xiaomi Pad 6 (pipa)
 
 on:
-  workflow_dispatch:
   push:
+  workflow_dispatch:
   schedule:
-    - cron: '0 0 * * 5'
+    - cron: '0 0 * * 5' # setiap Jumat
 
 jobs:
   build-kernel:
@@ -14,48 +14,48 @@ jobs:
       - name: Checkout this repo
         uses: actions/checkout@v4
 
-      - name: Set current date
-        run: echo "CURRENT_DATE=$(date +%Y-%m-%d)" >> $GITHUB_ENV
+      - name: Set up date env
+        run: echo "DATE=$(date +%Y-%m-%d)" >> $GITHUB_ENV
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y git python3 python3-pip libglib2.0-bin squashfs-tools xz-utils \
-            zip unzip wget cpio rsync curl gnupg sudo libstdc++6 device-tree-compiler
+          sudo apt update
+          sudo apt install -y python3 git wget ccache libstdc++ g++ gcc apktool
 
       - name: Clone pmbootstrap
         run: |
           git clone --depth=1 https://gitlab.postmarketos.org/postmarketOS/pmbootstrap.git
           mkdir -p ~/.local/bin
           ln -s "$PWD/pmbootstrap/pmbootstrap.py" ~/.local/bin/pmbootstrap
+          pmbootstrap --version
 
-      - name: Clone kernel source from GitHub (vipaoL/dev)
+      - name: Init pmbootstrap with device non-interactive
         run: |
-          git clone --depth=1 -b vipaoL/dev https://github.com/pipa-mainline/linux.git kernel-source
+          printf "xiaomi-pipa\nnone\n\n" | pmbootstrap init
 
-      - name: Init pmbootstrap
+      - name: Replace pmaports with custom repo
         run: |
-          echo "Using non-interactive init..."
-          yes "" | pmbootstrap init --no-interactive --device xiaomi-pipa --mirror-alpine https://mirror.alpinelinux.org/alpine/ --mirror-postmarketos https://mirror.postmarketos.org/packages
+          cd ~/.local/var/pmbootstrap/cache_git
+          rm -rf pmaports
+          git clone --depth=1 -b v25.06 https://github.com/rifux/pipa-pmaports.git pmaports
 
-      - name: Replace kernel source
+      - name: Clone kernel source from pipa-mainline/linux vipaoL/dev
         run: |
-          rm -rf ~/.local/var/pmbootstrap/cache_git/pmaports/device/testing/linux-xiaomi-pipa/src
           mkdir -p ~/.local/var/pmbootstrap/cache_git/pmaports/device/testing/linux-xiaomi-pipa
-          cp -r kernel-source ~/.local/var/pmbootstrap/cache_git/pmaports/device/testing/linux-xiaomi-pipa/src
+          git clone --depth=1 -b vipaoL/dev https://github.com/pipa-mainline/linux.git kernel-source
+          cd kernel-source
+          tar -czf ../linux-pipa.tar.gz .
+          cd ..
+          mv linux-pipa.tar.gz ~/.local/var/pmbootstrap/cache_git/pmaports/device/testing/linux-xiaomi-pipa/linux-pipa-initial.tar.gz
 
-      - name: Build kernel
+      - name: Build kernel .apk
         run: |
-          pmbootstrap build linux-xiaomi-pipa --no-interactive
+          pmbootstrap build linux-xiaomi-pipa
+          cp ~/.local/var/pmbootstrap/packages/*/aarch64/linux-xiaomi-pipa*.apk out/
 
-      - name: Prepare output folder
-        run: |
-          mkdir -p out
-          cp ~/.local/var/pmbootstrap/packages/*/aarch64/linux-xiaomi-pipa-*.apk out/
-
-      - name: Upload kernel .apk
+      - name: Upload kernel .apk as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: kernel-xiaomi-pipa-${{ env.CURRENT_DATE }}
+          name: kernel-xiaomi-pipa-${{ env.DATE }}
           path: out/
           retention-days: 7
