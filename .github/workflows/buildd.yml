@@ -8,28 +8,43 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Clone kernel source
-        uses: actions/checkout@v3
+      - name: Checkout this repo
+        uses: actions/checkout@v4
 
-      - name: Setup build environment
+      - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y build-essential libncurses-dev bison flex libssl-dev bc gcc-aarch64-linux-gnu
+          sudo apt install -y \
+            gcc-aarch64-linux-gnu \
+            build-essential \
+            bc \
+            bison \
+            flex \
+            libssl-dev \
+            libncurses-dev \
+            dwarves \
+            git \
+            ccache \
+            make \
+            wget \
+            curl \
+            u-boot-tools \
+            device-tree-compiler
 
-      - name: Configure kernel
+      - name: Clone kernel source from pipa-mainline/linux
         run: |
-          export ARCH=arm64
-          export CROSS_COMPILE=aarch64-linux-gnu-
-          make defconfig
+          git clone --depth=1 --branch vipaoL/dev https://github.com/pipa-mainline/linux.git kernel
 
       - name: Build kernel
+        working-directory: kernel
         run: |
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
+          make pipa_defconfig
           make -j$(nproc)
 
-      - name: Upload Image
-        uses: actions/upload-artifact@v3
+      - name: Upload Image.gz-dtb
+        uses: actions/upload-artifact@v4
         with:
           name: kernel-image
-          path: arch/arm64/boot/Image
+          path: kernel/arch/arm64/boot/Image.gz-dtb
