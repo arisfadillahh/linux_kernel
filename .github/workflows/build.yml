@@ -8,7 +8,7 @@ on:
 jobs:
   build-kernel:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
 
     steps:
     - name: Checkout Kernel Source
@@ -21,13 +21,20 @@ jobs:
     - name: Install Dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y build-essential libncurses-dev bison flex libssl-dev libelf-dev bc ccache python3 python3-pip
+        sudo apt-get install -y build-essential libncurses-dev bison flex libssl-dev libelf-dev bc ccache python3 python3-pip wget
 
-    - name: Setup Clang Toolchain
+    - name: Download AOSP Clang Toolchain
       run: |
-        git clone --depth=1 https://gitlab.com/AndroidDevil-Toolchains/azure-clang.git clang-llvm
-        # Verifikasi toolchain
-        ls clang-llvm/bin/clang || echo "Clang not found!"
+        # Menggunakan toolchain resmi dari Android Open Source Project
+        wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/master/clang-r498229.tar.gz
+        mkdir -p aosp-clang
+        tar -xzvf clang-r498229.tar.gz -C aosp-clang
+        rm clang-r498229.tar.gz
+
+    - name: Verify Toolchain
+      run: |
+        ls -la aosp-clang/bin/clang
+        aosp-clang/bin/clang --version || true
 
     - name: Build Configuration
       run: |
@@ -38,16 +45,20 @@ jobs:
       run: |
         cd kernel-src
         make -j$(($(nproc) - 1)) ARCH=arm64 O=out \
-          CC="$GITHUB_WORKSPACE/clang-llvm/bin/clang" \
-          LD="$GITHUB_WORKSPACE/clang-llvm/bin/ld.lld" \
-          AR="$GITHUB_WORKSPACE/clang-llvm/bin/llvm-ar" \
-          CROSS_COMPILE="$GITHUB_WORKSPACE/clang-llvm/bin/aarch64-linux-gnu-" \
+          CC="$GITHUB_WORKSPACE/aosp-clang/bin/clang" \
+          LD="$GITHUB_WORKSPACE/aosp-clang/bin/ld.lld" \
+          AR="$GITHUB_WORKSPACE/aosp-clang/bin/llvm-ar" \
+          NM="$GITHUB_WORKSPACE/aosp-clang/bin/llvm-nm" \
+          OBJCOPY="$GITHUB_WORKSPACE/aosp-clang/bin/llvm-objcopy" \
+          OBJDUMP="$GITHUB_WORKSPACE/aosp-clang/bin/llvm-objdump" \
+          STRIP="$GITHUB_WORKSPACE/aosp-clang/bin/llvm-strip" \
+          CROSS_COMPILE=aarch64-linux-gnu- \
           LLVM=1 LLVM_IAS=1
 
-    - name: List Artifacts
+    - name: Verify Build Output
       run: |
         ls -la kernel-src/out/arch/arm64/boot/ || true
-        ls -la kernel-src/out/vmlinux || true
+        [ -f kernel-src/out/arch/arm64/boot/Image ] && echo "Kernel build successful!" || echo "Kernel file not found!"
 
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
