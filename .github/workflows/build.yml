@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - vipaoL/dev # Trigger on pushes to the vipaoL/dev branch
+      - vipaoL/dev
 
 jobs:
   build:
@@ -12,51 +12,32 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
-        fetch-depth: 0 # Fetch all history for proper git operations
+        fetch-depth: 0
 
     - name: Install build dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y build-essential libncurses-dev bison flex libssl-dev libelf-dev bc ccache rsync git-lfs
-        # Install cross-compiler for ARM64
+        sudo apt-get install -y build-essential libncurses-dev bison flex libssl-dev libelf-dev bc ccache
         sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-
-    - name: Setup pmbootstrap (for packaging)
-      run: |
-        sudo apt-get install -y python3-pip
-        pip3 install --user pmbootstrap
-        # Add pmbootstrap to PATH for current session
-        echo "$HOME/.local/bin" >> $GITHUB_PATH
-        pmbootstrap init --force --no-interact --apkbuild-path=$GITHUB_WORKSPACE/pmaports # Initialize pmbootstrap
-        # Assuming pmaports will be created or cloned separately if needed
 
     - name: Prepare kernel source
       run: |
-        # Copy the sm8250.config to .config
         cp arch/arm64/configs/sm8250.config .config
-        # Ensure the .config is valid for the current kernel version
         make olddefconfig
 
     - name: Build kernel
       run: |
-        # Set cross-compilation variables
         export ARCH=arm64
         export CROSS_COMPILE=aarch64-linux-gnu-
-        # Build the kernel
         make -j$(nproc)
+        
+        # Verify kernel image exists
+        [ -f arch/arm64/boot/Image ] && echo "Kernel build successful" || echo "Kernel image not found"
 
-    - name: Package kernel with pmbootstrap
-      run: |
-        # This step assumes you have a device package for Xiaomi Pad 6 in pmaports
-        # If not, you might need to create one or adjust this step.
-        # For simplicity, we'll assume a generic packaging for now.
-        # You might need to adapt this based on actual pmOS device packaging.
-        pmbootstrap build --envkernel linux-xiaomi-pad-6 # Example package name
-
-    - name: Upload kernel artifacts
+    - name: Upload kernel image
       uses: actions/upload-artifact@v4
       with:
-        name: xiaomi-pad-6-kernel
-        path: ~/.local/var/pmbootstrap/packages/linux-xiaomi-pad-6-*.apk # Adjust path as per pmbootstrap output
+        name: kernel-image
+        path: arch/arm64/boot/Image
