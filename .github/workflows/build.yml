@@ -24,7 +24,7 @@ jobs:
 
     - name: Prepare kernel source
       run: |
-        cp arch/arm64/configs/sm8250.config .config
+        cp arch/arm64/configs/deconfig
         make olddefconfig
 
     - name: Build kernel
